@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html>
+
+    <head>
+        <title>Pincode Map</title>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+        <script src="https://unpkg.com/@turf/turf/turf.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+
+    </head>
+
+    <body>
+        <div id="map" style="height: 600px"></div>
+        <input type="file" accept=".csv" id="pincodeFileInput">
+        <button onclick="processPincodeFile()">Process Pincode File</button>
+        <br>
+        <input type="file" accept=".csv" id="storeFileInput">
+        <button onclick="processStoreFile()">Process Store File</button>
+        <br>
+        <label for="pincodeInput">Pincode:</label>
+        <input type="text" id="pincodeInput">
+        <label for="radiusInput">Radius (in kilometers):</label>
+        <input type="number" id="radiusInput">
+        <button onclick="highlightPincodes()">Highlight Pincodes</button>
+        <br>
+        <label for="storeInput">Store:</label>
+        <input type="text" id="storeInput">
+        <button onclick="searchByStore()">Search by Store</button>
+        <br>
+        <input type="checkbox" id="clearDataCheckbox">
+        <label for="clearDataCheckbox">Clear Old Data</label>
+
+        <script>
+            // Initialize the map
+            var map = L.map('map').setView([20.5937, 78.9629], 5); // Centered on India
+
+            // Add a tile layer (base map)
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+            }).addTo(map);
+
+            // Create separate groups for circles and pins
+            var circlesGroup = L.featureGroup().addTo(map);
+            var pinsGroup = L.featureGroup().addTo(map);
+
+            var pincodeGeojsonData = {
+                type: 'FeatureCollection',
+                features: []
+            };
+
+            var storeGeojsonData = {
+                type: 'FeatureCollection',
+                features: []
+            };
+
+            // Function to parse the CSV data and convert it to GeoJSON
+            function parsePincodeCSVData (csvData)
+            {
+                var parsedData = Papa.parse(csvData, {
+                    header: true
+                }).data;
+
+                pincodeGeojsonData.features = parsedData.map(function (item)
+                {
+                    var feature = {
+                        type: 'Feature',
+                        properties: {
+                            pincode: item.pin_code,
+                            office_name: item.office_name,
+                            state: item.state,
+                            district: item.district,
+                            country: item.country,
+                            latitude: item.latitude,
+                            longitude: item.longitude,
+                            area: item.Shape__Area,
+                            length: item.Shape__Length,
+                            stores: []
+                        },
+                        geometry: {
+                            type: 'Point',
+                            coordinates: [parseFloat(item.longitude), parseFloat(item.latitude)]
+                        }
+                    };
+                    return feature;
+                });
+
+                // Clear existing circles and pins if the checkbox is checked
+                var clearDataCheckbox = document.getElementById('clearDataCheckbox');
+                if (clearDataCheckbox.checked)
+                {
+                    circlesGroup.clearLayers();
+                    pinsGroup.clearLayers();
+                }
+
+                alert('Pincode data uploaded successfully!');
+                console.log(parsedData.slice(0, 2));
+            }
+
+
+            // Function to parse the store mapping CSV data
+            function parseStoreCSVData (csvData)
+            {
+                var parsedData = Papa.parse(csvData, {
+                    header: true
+                }).data;
+
+                parsedData.forEach(function (item)
+                {
+                    // Find the feature with the given pincode
+                    var pincodeFeature = pincodeGeojsonData.features.find(
+                        (feature) => feature.properties.pincode === item.pincode
+                    );
+
+                    if (pincodeFeature)
+                    {
+                        for (var key in item)
+                        {
+                            if (key !== 'pincode')
+                            {
+                                pincodeFeature.properties.stores.push(item[key]);
+                            }
+                        }
+                    }
+                });
+
+                alert('Store mapping data uploaded successfully!');
+                console.log(parsedData.slice(0, 2));
+            }
+
+
+            // Function to find and highlight pincodes within a given radius
+            function highlightPincodes ()
+            {
+                var pincodeInput = document.getElementById('pincodeInput').value;
+                var radiusInput = document.getElementById('radiusInput').value;
+
+                if (!pincodeInput || !radiusInput)
+                {
+                    alert('Please enter a pincode and radius.');
+                    return;
+                }
+
+                var radius = parseFloat(radiusInput);
+
+                // Find the feature with the given pincode
+                var pincodeFeature = pincodeGeojsonData.features.find(
+                    (feature) => feature.properties.pincode === pincodeInput
+                );
+
+                if (!pincodeFeature)
+                {
+                    alert('Pincode not found!');
+                    return;
+                }
+
+                // Clear existing circles and pins if the checkbox is checked
+                var clearDataCheckbox = document.getElementById('clearDataCheckbox');
+                if (clearDataCheckbox.checked)
+                {
+                    circlesGroup.clearLayers();
+                    pinsGroup.clearLayers();
+                }
+
+                // Draw a circle with the given radius and add it to the circles group
+                var circle = L.circle(
+                    [pincodeFeature.geometry.coordinates[1], pincodeFeature.geometry.coordinates[0]],
+                    {
+                        color: 'red',
+                        fillColor: '#f03',
+                        fillOpacity: 0.5,
+                        radius: radius * 1000, // Convert radius to meters
+                    }
+                ).addTo(circlesGroup);
+
+                // Find the features within the circle
+                var featuresWithin = pincodeGeojsonData.features.filter((feature) =>
+                {
+                    if (feature !== pincodeFeature)
+                    {
+                        var from = turf.point([
+                            feature.geometry.coordinates[0],
+                            feature.geometry.coordinates[1],
+                        ]);
+                        var to = turf.point([
+                            pincodeFeature.geometry.coordinates[0],
+                            pincodeFeature.geometry.coordinates[1],
+                        ]);
+                        var options = { units: 'kilometers' };
+                        var distance = turf.distance(from, to, options);
+                        return distance <= radius;
+                    }
+                    return false;
+                });
+
+                // Add a pin marker at the pincode location and add it to the pins group
+                var pinMarker = L.marker([
+                    pincodeFeature.geometry.coordinates[1],
+                    pincodeFeature.geometry.coordinates[0],
+                ]).addTo(pinsGroup);
+
+                // Create the popup content with formatted details
+                var popupContent = `<strong>Pincode:</strong> ${pincodeFeature.properties.pincode}<br>`;
+                popupContent += `<strong>Office Name:</strong> ${pincodeFeature.properties.office_name}<br>`;
+                popupContent += `<strong>State:</strong> ${pincodeFeature.properties.state}<br>`;
+                popupContent += `<strong>District:</strong> ${pincodeFeature.properties.district}<br>`;
+                popupContent += `<strong>Country:</strong> ${pincodeFeature.properties.country}<br>`;
+                popupContent += `<strong>Latitude:</strong> ${pincodeFeature.properties.latitude}<br>`;
+                popupContent += `<strong>Longitude:</strong> ${pincodeFeature.properties.longitude}<br>`;
+                popupContent += `<strong>Area:</strong> ${pincodeFeature.properties.area}<br>`;
+                popupContent += `<strong>Length:</strong> ${pincodeFeature.properties.length}<br>`;
+                if (pincodeFeature.properties.stores && pincodeFeature.properties.stores.length > 0)
+                {
+                    popupContent += '<strong>Stores:</strong><br>';
+                    pincodeFeature.properties.stores.forEach((store) =>
+                    {
+                        popupContent += `${store}<br>`;
+                    });
+                }
+
+                // Bind the popup to the pin marker with the custom class
+                pinMarker.bindPopup(popupContent);
+
+                // Draw circles and add pins for overlapping pincodes
+                featuresWithin.forEach((feature) =>
+                {
+                    var overlappingPin = L.marker([
+                        feature.geometry.coordinates[1],
+                        feature.geometry.coordinates[0],
+                    ]).addTo(pinsGroup);
+
+                    // Create the popup content for overlapping pins with store names
+                    var overlappingPopupContent = `<strong>Pincode:</strong> ${feature.properties.pincode}<br`;
+                    overlappingPopupContent += `<strong>Office Name:</strong> ${feature.properties.office_name}<br>`;
+                    overlappingPopupContent += `<strong>State:</strong> ${feature.properties.state}<br>`;
+                    overlappingPopupContent += `<strong>District:</strong> ${feature.properties.district}<br>`;
+                    overlappingPopupContent += `<strong>Country:</strong> ${feature.properties.country}<br>`;
+                    overlappingPopupContent += `<strong>Latitude:</strong> ${feature.properties.latitude}<br>`;
+                    overlappingPopupContent += `<strong>Longitude:</strong> ${feature.properties.longitude}<br>`;
+                    overlappingPopupContent += `<strong>Area:</strong> ${feature.properties.area}<br>`;
+                    overlappingPopupContent += `<strong>Length:</strong> ${feature.properties.length}<br>`;
+                    if (feature.properties.stores && feature.properties.stores.length > 0)
+                    {
+                        overlappingPopupContent += '<strong>Stores:</strong><br>';
+                        feature.properties.stores.forEach((store) =>
+                        {
+                            overlappingPopupContent += `${store}<br>`;
+                        });
+                    }
+
+                    // Bind the popup to the overlapping pin
+                    overlappingPin.bindPopup(overlappingPopupContent);
+                });
+
+                // Pan and zoom to fit all the pins and circles
+                var group = L.featureGroup([circle, pinMarker, ...pinsGroup.getLayers()]);
+                map.fitBounds(group.getBounds());
+
+
+            }
+
+            // Function to search for pincodes by store
+            // ...
+
+            // Function to search for pincodes by store
+            function searchByStore ()
+            {
+                var storeInput = document.getElementById('storeInput').value;
+
+                if (!storeInput)
+                {
+                    alert('Please enter a store name.');
+                    return;
+                }
+
+                var radiusInput = document.getElementById('radiusInput').value;
+                var radius = parseFloat(radiusInput) || 5;
+
+                // Find pincodes with the given store name within the specified radius
+                var matchingPincodes = [];
+                pincodeGeojsonData.features.forEach((feature) =>
+                {
+                    if (feature.properties.stores.includes(storeInput))
+                    {
+                        matchingPincodes.push(feature.properties.pincode);
+                    }
+                });
+
+                if (matchingPincodes.length === 0)
+                {
+                    alert('Store not found!');
+                    return;
+                }
+
+                // Find the features within the specified radius for the matching pincodes
+                var featuresWithin = pincodeGeojsonData.features.filter((feature) =>
+                    matchingPincodes.includes(feature.properties.pincode)
+                );
+                if (featuresWithin.length === 0)
+                {
+                    alert('No pins found for the store.');
+                    return;
+                }
+
+                // Draw circles and add pins for the features within the specified radius
+                var circlesWithin = [];
+                var pinsWithin = [];
+
+                featuresWithin.forEach((feature) =>
+                {
+                    // Draw a circle with the given radius and add it to the circles group
+                    var circle = L.circle(
+                        [feature.geometry.coordinates[1], feature.geometry.coordinates[0]],
+                        {
+                            color: 'red',
+                            fillColor: '#f03',
+                            fillOpacity: 0.5,
+                            radius: radius * 1000, // Convert radius to meters
+                        }
+                    ).addTo(circlesGroup);
+
+                    circlesWithin.push(circle);
+
+                    // Add a pin marker at the pincode location and add it to the pins group
+                    var pinMarker = L.marker([
+                        feature.geometry.coordinates[1],
+                        feature.geometry.coordinates[0],
+                    ]).addTo(pinsGroup);
+
+                    var popupContent = `<strong>Pincode:</strong> ${feature.properties.pincode}<br>`;
+                    popupContent += `<strong>Office Name:</strong> ${feature.properties.office_name}<br>`;
+                    popupContent += `<strong>State:</strong> ${feature.properties.state}<br>`;
+                    popupContent += `<strong>District:</strong> ${feature.properties.district}<br>`;
+                    popupContent += `<strong>Country:</strong> ${feature.properties.country}<br>`;
+                    popupContent += `<strong>Latitude:</strong> ${feature.properties.latitude}<br>`;
+                    popupContent += `<strong>Longitude:</strong> ${feature.properties.longitude}<br>`;
+                    popupContent += `<strong>Area:</strong> ${feature.properties.area}<br>`;
+                    popupContent += `<strong>Length:</strong> ${feature.properties.length}<br>`;
+                    if (feature.properties.stores && feature.properties.stores.length > 0)
+                    {
+                        popupContent += '<strong>Stores:</strong><br>';
+                        feature.properties.stores.forEach((store) =>
+                        {
+                            popupContent += `${store}<br>`;
+                        });
+                    }
+
+                    // Bind the popup to the pin marker with the custom class
+                    pinMarker.bindPopup(popupContent);
+
+                    pinsWithin.push(pinMarker);
+                });
+
+                // Pan and zoom to fit all the pins and circles
+                var group = L.featureGroup([...circlesWithin, ...pinsWithin]);
+                map.fitBounds(group.getBounds());
+            }
+
+            // ...
+
+
+            // Handle file upload for pincode data
+            function processPincodeFile ()
+            {
+                var fileInput = document.getElementById('pincodeFileInput');
+                var file = fileInput.files[0];
+
+                if (!file)
+                {
+                    alert('Please select a file.');
+                    return;
+                }
+
+                var reader = new FileReader();
+
+                reader.onload = function (e)
+                {
+                    var contents = e.target.result;
+                    parsePincodeCSVData(contents);
+                };
+
+                reader.readAsText(file);
+            }
+
+            // Handle file upload for store mapping data
+            function processStoreFile ()
+            {
+                var fileInput = document.getElementById('storeFileInput');
+                var file = fileInput.files[0];
+
+                if (!file)
+                {
+                    alert('Please select a file.');
+                    return;
+                }
+
+                var reader = new FileReader();
+
+                reader.onload = function (e)
+                {
+                    var contents = e.target.result;
+                    parseStoreCSVData(contents);
+                };
+
+                reader.readAsText(file);
+            }
+        </script>
+    </body>
+
+</html>
