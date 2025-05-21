@@ -1,0 +1,140 @@
+body {
+    font-family: sans-serif;
+    margin: 0;
+    background-color: #f4f4f4;
+    color: #333;
+    line-height: 1.6;
+}
+
+header {
+    background: #333;
+    color: #fff;
+    padding: 1rem 0;
+    text-align: center;
+}
+
+header h1 {
+    margin: 0;
+}
+
+.container {
+    width: 80%;
+    margin: auto;
+    overflow: hidden;
+    padding: 0 2rem;
+}
+
+#map {
+    height: 400px;
+    width: 100%;
+    margin-bottom: 1rem;
+    border: 1px solid #ccc;
+}
+
+input[type="file"],
+input[type="text"],
+button {
+    padding: 0.7rem;
+    margin-bottom: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+button {
+    background-color: #333;
+    color: #fff;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #555;
+}
+
+section {
+    background: #fff;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+h2 {
+    color: #333;
+    margin-top: 0;
+}
+
+label {
+    display: block;
+    margin-bottom: .2rem;
+}
+
+/* Notification Styles */
+#notifications {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 1000;
+    width: 300px;
+}
+
+.notification {
+    padding: 1rem;
+    margin-bottom: 0.5rem;
+    border-radius: 4px;
+    color: #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.notification.success {
+    background-color: #28a745; /* Green */
+}
+
+.notification.error {
+    background-color: #dc3545; /* Red */
+}
+
+.notification.info {
+    background-color: #17a2b8; /* Blue */
+}
+
+.notification.processing {
+    background-color: #ffc107; /* Amber/Yellow */
+    color: #333; /* Darker text for yellow background */
+}
+
+/* Google Maps InfoWindow Content Styling */
+.gm-style .gm-style-iw-c { /* Targets the main InfoWindow container */
+    padding: 0 !important; /* Override default padding */
+}
+
+.gm-style .gm-style-iw-d { /* Targets the content box within InfoWindow */
+    overflow: auto !important; /* Ensure scrollbars appear if content is too tall */
+    padding: 10px !important;
+}
+
+.infowindow-content {
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    padding: 5px; /* Add some padding inside our custom div */
+    max-width: 300px; /* Max width for the content */
+}
+
+.infowindow-content p {
+    margin: 5px 0;
+}
+
+.infowindow-content strong {
+    font-weight: bold;
+    color: #333;
+}
+
+.infowindow-content ul {
+    list-style-type: disc;
+    margin: 5px 0 5px 20px;
+    padding: 0;
+}
+
+.infowindow-content li {
+    margin-bottom: 3px;
+}

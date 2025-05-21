@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pincode Mapper Tests</title>
+    <link rel="stylesheet" href="style.css"> <!-- Optional: if test results need some app styling -->
+    <style>
+        #testResults p {
+            margin: 5px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>Pincode Mapper - Unit Tests</h1>
+    <div id="notifications"></div> <!-- For showNotification if its output is tested -->
+    <div id="testResults">
+        <h2>Test Results:</h2>
+    </div>
+
+    <!-- Include the main script first, as tests.js will depend on it -->
+    <script src="script.js"></script>
+    <!-- Include the test script -->
+    <script src="tests.js"></script>
+
+    <script>
+        // Run tests when the page is fully loaded
+        window.onload = function() {
+            if (typeof runAllTests === 'function') {
+                runAllTests();
+            } else {
+                document.getElementById('testResults').innerHTML += '<p style="color: red;">ERROR: runAllTests function not found. Make sure tests.js is loaded correctly.</p>';
+            }
+        };
+    </script>
+</body>
+</html>
