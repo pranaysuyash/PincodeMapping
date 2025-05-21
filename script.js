@@ -1,20 +1,22 @@
 (function() {
     'use strict';
 
-    // Application scope variables
+    // Application scope variables for Leaflet
     let map;
-    let markers = [];
+    let markersLayer; // Layer group for markers
     let pincodeData = {}; // Stores processed data from CSV
 
     /**
-     * Initializes the Google Map.
-     * This function is globally exposed via window.initMap for the Google Maps API callback.
+     * Initializes the Leaflet Map.
      */
-    function initMap() {
-        map = new google.maps.Map(document.getElementById('map'), {
-            center: { lat: 20.5937, lng: 78.9629 }, // Default center for India
-            zoom: 5
-        });
+    function initializeLeafletMap() {
+        map = L.map('map').setView([20.5937, 78.9629], 5); // Default view (India)
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18, // Max zoom for OpenStreetMap
+            attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        markersLayer = L.layerGroup().addTo(map);
+        // console.log("Leaflet map initialized."); // Removed for final version
     }
 
     /**
@@ -179,46 +181,37 @@
     }
 
     /**
-     * Clears all markers from the map and the internal markers array.
+     * Clears all markers from the map.
      */
     function clearMarkers() {
-        markers.forEach(marker => marker.setMap(null));
-        markers = [];
+        if (markersLayer) {
+            markersLayer.clearLayers();
+        }
     }
-    
+
     /**
-     * Creates and adds a single marker to the map with an InfoWindow.
-     * @param {{lat: number, lng: number}} position - The latitude and longitude for the marker.
-     * @param {string} title - The title for the marker (tooltip).
-     * @param {string} contentString - HTML content for the InfoWindow.
+     * Creates a Leaflet marker with a popup.
+     * @param {Array|{lat: number, lng: number}} position - Latitude and longitude. Leaflet expects [lat, lng].
+     * @param {string} title - Title for the marker (used as alt text).
+     * @param {string} contentString - HTML content for the popup.
+     * @returns {L.Marker} The Leaflet marker.
      */
-    function createMarkerWithInfoWindow(position, title, contentString) {
-        const marker = new google.maps.Marker({
-            position: position,
-            map: map,
-            title: title
-        });
-
-        const infoWindow = new google.maps.InfoWindow({
-            content: contentString
-        });
-
-        marker.addListener('click', () => {
-            // Close other open info windows
-            markers.forEach(m => {
-                if (m.infoWindow) m.infoWindow.close();
-            });
-            infoWindow.open(map, marker);
-            marker.infoWindow = infoWindow; // Store reference to close it later
-        });
+    function createMarkerWithPopup(position, title, contentString) {
+        // Leaflet expects [lat, lng]
+        const latLng = Array.isArray(position) ? position : [position.lat, position.lng];
+        const marker = L.marker(latLng, { title: title });
+        marker.bindPopup(contentString);
         return marker;
     }
-
 
     /**
      * Plots a location on the map based on a pincode.
      */
     function plotPincode() {
+        if (!map) {
+            showNotification('Map is not initialized.', 'error');
+            return;
+        }
         clearMarkers();
         const pincodeInput = document.getElementById('pincodeInput');
         const pincode = pincodeInput.value.trim();
@@ -229,24 +222,24 @@
         }
 
         if (pincodeData[pincode]) {
-            const data = pincodeData[pincode];
-            const position = { lat: data.lat, lng: data.lng };
+            const data = pincodeData[pincode]; // data here is pincodeDetails
+            const lat = data.lat;
+            const lon = data.lng; // Assuming 'lng' is used, Leaflet often uses 'lon'
             
-            map.setCenter(position);
-            map.setZoom(12);
-
             const storeListHtml = data.stores.length > 0 ?
                 `<ul>${data.stores.map(s => `<li>${s}</li>`).join('')}</ul>` :
                 'No stores listed for this pincode.';
-            const contentString = `
+            const popupContentString = `
                 <div class="infowindow-content">
                     <p><strong>Pincode:</strong> ${pincode}</p>
                     <p><strong>Stores:</strong></p>
                     ${storeListHtml}
                 </div>`;
             
-            const marker = createMarkerWithInfoWindow(position, `Pincode: ${pincode}`, contentString);
-            markers.push(marker);
+            const marker = createMarkerWithPopup([lat, lon], `Pincode: ${pincode}`, popupContentString);
+            marker.addTo(markersLayer);
+            map.setView([lat, lon], 12); // Zoom level 12
+            marker.openPopup();
 
             showNotification(`Pincode ${pincode} plotted. Stores: ${data.stores.join(', ')}`, 'success');
         } else {
@@ -258,6 +251,10 @@
      * Searches for stores by name and plots their locations.
      */
     function searchStore() {
+        if (!map) {
+            showNotification('Map is not initialized.', 'error');
+            return;
+        }
         clearMarkers();
         const storeNameInput = document.getElementById('storeNameInput');
         const storeNameQuery = storeNameInput.value.trim().toLowerCase();
@@ -268,56 +265,56 @@
         }
 
         let foundStoresCount = 0;
-        const bounds = new google.maps.LatLngBounds();
-
+        
         for (const pincode in pincodeData) {
-            const data = pincodeData[pincode];
-            const matchingStores = data.stores.filter(store => store.toLowerCase().includes(storeNameQuery));
+            const entry = pincodeData[pincode]; // entry here is pincodeDetails
+            const matchingStores = entry.stores.filter(store => store.toLowerCase().includes(storeNameQuery));
 
             if (matchingStores.length > 0) {
                 foundStoresCount += matchingStores.length;
-                const position = { lat: data.lat, lng: data.lng };
+                const lat = entry.lat;
+                const lon = entry.lng;
 
                 const storeListHtml = `<ul>${matchingStores.map(s => `<li>${s}</li>`).join('')}</ul>`;
-                const contentString = `
+                const popupContentStringForEntry = `
                     <div class="infowindow-content">
                         <p><strong>Pincode:</strong> ${pincode}</p>
                         <p><strong>Matching Stores:</strong></p>
                         ${storeListHtml}
                     </div>`;
                 
-                const marker = createMarkerWithInfoWindow(
-                    position, 
+                const marker = createMarkerWithPopup(
+                    [lat, lon], 
                     `Pincode: ${pincode}\nMatching Stores: ${matchingStores.join(', ')}`, 
-                    contentString
+                    popupContentStringForEntry
                 );
-                markers.push(marker);
-                bounds.extend(position);
+                marker.addTo(markersLayer);
             }
         }
 
-        if (foundStoresCount > 0) {
-            map.fitBounds(bounds);
-            if (markers.length === 1) { // If only one location, zoom in more
-                map.setCenter(markers[0].getPosition());
-                map.setZoom(12);
-            }
+        if (markersLayer.getLayers().length > 0) {
+            map.fitBounds(markersLayer.getBounds().pad(0.1)); // pad(0.1) adds some padding
             showNotification(`${foundStoresCount} store(s) found matching "${storeNameQuery}".`, 'success');
         } else {
             showNotification(`No stores found matching "${storeNameQuery}".`, 'error');
         }
     }
 
-    // Expose functions to global scope for HTML event handlers and Maps API callback
-    window.initMap = initMap;
+    // Expose functions to global scope for HTML event handlers
     window.handleFileUpload = handleFileUpload;
     window.plotPincode = plotPincode;
     window.searchStore = searchStore;
+
+    // Initialize the map when the DOM is ready
+    document.addEventListener('DOMContentLoaded', initializeLeafletMap);
+
     // Expose for testing purposes
     if (window.location.pathname.endsWith('tests.html')) { // Only expose for tests.html
         window.testableScript = {
             parsePincodeCSVData: parsePincodeCSVData,
-            showNotification: showNotification // Potentially useful for observing test side effects
+            showNotification: showNotification, // Potentially useful for observing test side effects
+            // Note: Leaflet specific functions like createMarkerWithPopup are not exposed here
+            // as they depend on Leaflet's L object. Tests for them would need a mock/stub for L.
         };
     }
 })();
